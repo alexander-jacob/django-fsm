@@ -339,7 +339,7 @@ class FSMFieldMixin(object):
                 self.set_state(instance, exception_state)
                 # see https://github.com/viewflow/django-fsm/pull/234/files
                 with transaction.atomic():
-                    instance.save()
+                    instance.save(force_update=True)
                 signal_kwargs['target'] = exception_state
                 signal_kwargs['exception'] = exc
                 post_transition.send(**signal_kwargs)
