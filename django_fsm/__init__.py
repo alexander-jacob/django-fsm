@@ -6,7 +6,7 @@ import inspect
 import sys
 from functools import wraps
 
-from django.db import models
+from django.db import models, transaction
 from django.db.models.signals import class_prepared
 from django_fsm.signals import pre_transition, post_transition
 
@@ -338,7 +338,8 @@ class FSMFieldMixin(object):
                 self.set_proxy(instance, exception_state)
                 self.set_state(instance, exception_state)
                 # see https://github.com/viewflow/django-fsm/pull/234/files
-                instance.save()
+                with transaction.atomic():
+                    instance.save()
                 signal_kwargs['target'] = exception_state
                 signal_kwargs['exception'] = exc
                 post_transition.send(**signal_kwargs)
