@@ -337,6 +337,8 @@ class FSMFieldMixin(object):
             if exception_state:
                 self.set_proxy(instance, exception_state)
                 self.set_state(instance, exception_state)
+                # see https://github.com/viewflow/django-fsm/pull/234/files
+                instance.save()
                 signal_kwargs['target'] = exception_state
                 signal_kwargs['exception'] = exc
                 post_transition.send(**signal_kwargs)
