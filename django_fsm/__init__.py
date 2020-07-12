@@ -4,6 +4,7 @@ State tracking functionality for django models
 """
 import inspect
 import sys
+import traceback
 from functools import wraps
 
 from django.db import models, transaction
@@ -239,6 +240,15 @@ class FSMFieldDescriptor(object):
         self.field.set_state(instance, value)
 
 
+class FSMTransitionError(Exception):
+
+    def __init__(self, exception: Exception):
+        self.f = traceback.format_exception(*sys.exc_info())
+
+    def __str__(self):
+        return '\n'.join(self.f)
+
+
 class FSMFieldMixin(object):
     descriptor_class = FSMFieldDescriptor
 
@@ -334,16 +344,27 @@ class FSMFieldMixin(object):
                 self.set_state(instance, next_state)
         except Exception as exc:
             exception_state = meta.exception_state(current_state)
+            transition_error = FSMTransitionError(exc)
             if exception_state:
-                self.set_proxy(instance, exception_state)
-                self.set_state(instance, exception_state)
-                # see https://github.com/viewflow/django-fsm/pull/234/files
+                result = None
                 with transaction.atomic():
+
+                    self.set_proxy(instance, exception_state)
+                    self.set_state(instance, exception_state)
+                    setattr(instance, '__django_fsm_log_attr_description', str(transition_error))
                     instance.save(force_update=True)
-                signal_kwargs['target'] = exception_state
-                signal_kwargs['exception'] = exc
-                post_transition.send(**signal_kwargs)
-            raise
+                    signal_kwargs['target'] = exception_state
+                    signal_kwargs['exception'] = exc
+
+                    post_transition.send(**signal_kwargs)
+
+                    def _raise():
+                        raise transition_error
+
+                    transaction.on_commit(_raise)
+
+            else:
+                raise transition_error
         else:
             post_transition.send(**signal_kwargs)
 
